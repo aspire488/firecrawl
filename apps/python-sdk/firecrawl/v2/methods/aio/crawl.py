@@ -363,8 +363,43 @@ async def crawl_params_preview(client: AsyncHttpClient, request: CrawlParamsRequ
         "zeroDataRetention": "zero_data_retention",
     }
     for camel, snake in mapping.items():
-        if camel in params_data:
-            converted[snake] = params_data[camel]
+        if camel not in params_data:
+            continue
+
+        value = params_data[camel]
+        if camel == "scrapeOptions" and isinstance(value, dict):
+            scrape_field_mappings = {
+                "includeTags": "include_tags",
+                "excludeTags": "exclude_tags",
+                "onlyMainContent": "only_main_content",
+                "waitFor": "wait_for",
+                "skipTlsVerification": "skip_tls_verification",
+                "removeBase64Images": "remove_base64_images",
+            }
+            scrape_options: Dict[str, Any] = {
+                snake_name: value[camel_name]
+                for camel_name, snake_name in scrape_field_mappings.items()
+                if camel_name in value
+            }
+
+            if "formats" in value:
+                formats = value["formats"]
+                if isinstance(formats, list):
+                    from ...types import ScrapeFormats
+
+                    scrape_options["formats"] = ScrapeFormats(formats=formats)
+                else:
+                    scrape_options["formats"] = formats
+
+            # Keep options that already use SDK field names or have no alias.
+            for key, option_value in value.items():
+                if key not in scrape_field_mappings and key != "formats":
+                    scrape_options[key] = option_value
+
+            converted[snake] = scrape_options
+        else:
+            converted[snake] = value
+
     if "webhook" in params_data:
         wk = params_data["webhook"]
         converted["webhook"] = wk
